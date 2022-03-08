@@ -22,64 +22,137 @@ def _import_module(name):
     return module
 
 
-async def first_migration(db: Database):
+async def first_migration(db: Database) -> None:
+    """
+    :param db: The database to work
+    :return: None.
+    Description: Makes the first migration if it has not been done.
+    """
+
     module = importlib.import_module("initial_001")
     await module.nextmigration(db)
 
 
-async def prefirstmigrate():
+async def prefirstmigrate() -> None:
+    """
+    :return: None.
+    Description: Creates the basis for migration
+    """
+
     if "migrations" not in os.listdir():
         os.mkdir("migrations")
     if "initial_001.py" not in os.listdir(os.getcwd() + "\\migrations"):
         shutil.copy("libraries\\examples\\migration_example.py", "migrations/initial_001.py")
 
 
-async def migrate(db: Database):
+async def migrate(db: Database, args) -> None:
+    """
+    :param db: The database to work
+    :param args: Not used in this function
+    :return: None.
+    Description: Allows you to roll out new migrations, if they do not exist yet.
+    """
+
     await prefirstmigrate()
     sys.path.append("migrations")
+
     if not await table_exists(db, "migrations"):
         await first_migration(db)
-    for file in [files.split(".")[0] for files in os.listdir("migrations")[0:-1]]:
+    files_list = list(filter(lambda file: file.endswith(".py"), os.listdir("migrations")))
+    files_list = list(map(lambda filename: filename.strip(".py"), files_list))
+    for file in files_list:
         if await entry_exists(db, "migrations", {"name": file}):
             continue
+
         module = importlib.import_module(file)
         await module.nextmigration(db)
 
 
-async def rollback_common(db: Database):
+async def rollback_common(db: Database) -> list:
+    """
+    :param db: The database to work
+    :return: list of entries that can be rolled back.
+    Description: General method
+    """
+
     sys.path.append("migrations")
+
     if not await table_exists(db, "migrations"):
         raise CreatorError("No migration was applied.")
+
     data = await get_filtered_entries(db, "migrations", None, "timestamp desc")
     return data
 
 
-async def rollback_all(db: Database):
+async def rollback_all(db: Database, args) -> None:
+    """
+    :param db: The database to work
+    :param args: Not used in this function
+    :return: None.
+    Description: Rolls back all migrations
+    """
+
     data = await rollback_common(db)
+
     for entry in data:
         module = importlib.import_module(entry[1])
         await module.rollbackmigration(db)
 
 
-async def rollback(db: Database):
+async def rollback(db: Database, args) -> None:
+    """
+    :param db: The database to work
+    :param args: Allows you to take the necessary arguments
+    :return: None.
+    Description: Rolls back the last migration, or if --step=N is specified, rolls back the last N migrations.
+    """
+
     data = await rollback_common(db)
-    module = importlib.import_module(data[0][1])
-    await module.rollbackmigration(db)
+    steps = 1
+
+    if len(args) == 3:
+        steps_timely = args[2].split("=")[1]
+        if steps_timely.isdigit():
+            steps = int(steps_timely)
+
+    steps = len(data) if steps > len(data) else steps
+
+    for step in range(0, steps):
+        module = importlib.import_module(data[step][1])
+        await module.rollbackmigration(db)
+
+
+async def refresh(db: Database, args) -> None:
+    """
+    :param db: The database to work
+    :param args: Not used in this function
+    :return: None.
+    Description: First deletes all migrations, then rolls them again.
+    """
+
+    try:
+        await rollback_all(db, args)
+    except CreatorError as e:
+        print(e)
+    await migrate(db, args)
 
 
 command = {
     "rollback": rollback,
-    "rollbackall": rollback_all,
-    "migrate": migrate
+    "reset": rollback_all,
+    "migrate": migrate,
+    "refresh": refresh
 }
 
 
-async def main():
+async def main() -> None:
     db = await get_database_instance()
     args = sys.argv
-    if len(args) != 2:
-        raise CreatorError("Too many or too few arguments.")
-    await command[args[1]](db)
+
+    if len(args) < 2:
+        raise CreatorError("Too few arguments.")
+
+    await command[args[1]](db, args)
     await db.disconnect()
 
 
