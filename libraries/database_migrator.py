@@ -1,6 +1,9 @@
+from datetime import datetime
+
 import sqlalchemy
 from sqlalchemy.engine import Engine
 
+from libraries.files import check_file
 from settings import database
 
 
@@ -16,6 +19,17 @@ def get_db_instance():
     db.connect()
     table_exists(db, "migrations")
     return db
+
+
+def drop_table(db: Engine, tablename: str):
+    query = "DROP TABLE %s" % tablename
+    db.execute(query)
+
+
+def create_table(db: Engine, tablename: str, values: dict):
+    values_str = ", ".join(f"{k} {v}" for k, v in values.items())
+    query = "CREATE TABLE IF NOT EXISTS %s(id SERIAL PRIMARY KEY, %s)" % (tablename, values_str)
+    db.execute(query)
 
 
 def get_all_entries(db: Engine, tablename):
@@ -36,13 +50,17 @@ def table_exists(db: Engine, tablename):
     return get_one_result(data)[0]
 
 
-def insert_migration(db: Engine, name: str, timestamp):
+def insert_migration(db: Engine, name: str):
+    timestamp = datetime.now()
     query = """INSERT INTO migrations(name, timestamp) VALUES('%s', '%s')""" % (name, timestamp)
     db.execute(query)
     print(f"successfully inserted migration: {name}")
 
 
-def delete_migration(db: Engine, name: str, timestamp):
+def delete_migration(db: Engine, name: str):
+    if name.startswith("001_initial"):
+        print(f"successful migration rollback: {name}")
+        return
     name = name.split('.')[0]
     query = """DELETE FROM migrations WHERE name='%s'""" % name
     db.execute(query)
@@ -66,4 +84,3 @@ def get_filtered_entries(db: Engine, tablename: str, values: dict = None, orderb
 def get_one_result(result):
     for data in result:
         return data
-
