@@ -58,13 +58,12 @@ def insert_migration(db: Engine, name: str):
 
 
 def delete_migration(db: Engine, name: str):
+    print(f"successful migration rollback: {name}")
     if name.startswith("001_initial"):
-        print(f"successful migration rollback: {name}")
         return
     name = name.split('.')[0]
     query = """DELETE FROM migrations WHERE name='%s'""" % name
     db.execute(query)
-    print(f"successful migration rollback: {name}")
 
 
 def get_all_results(result):
