@@ -1,7 +1,4 @@
-from fastapi import FastAPI
 from starlette.requests import Request
-
-app = FastAPI()
 
 
 class Middleware:
@@ -11,14 +8,5 @@ class Middleware:
         if token is None:
             request.scope["middleware"]['userdata'] = False
             return await call_next(request)
-        request.scope["middlewaredata"]['userdata'] = False
+        request.scope["middleware"]['userdata'] = False
         return await call_next(request)
-
-
-@app.get("/")
-async def root(request: Request):
-    print(request.__dict__.get("scope"))
-    return {"loading": 'loaded'}
-
-
-app.middleware("http")(Middleware())
