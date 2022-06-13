@@ -18,7 +18,6 @@ def get_db_instance():
     )
     db = sqlalchemy.create_engine(url)
     db.connect()
-    table_exists(db, "migrations")
     return db
 
 
