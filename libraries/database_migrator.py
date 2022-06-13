@@ -1,40 +1,25 @@
+import os
 from datetime import datetime
 
+import dotenv
 import sqlalchemy
 from sqlalchemy.engine import Engine
 
-from libraries.files import check_file
-from settings import database
+dotenv.load_dotenv()
 
 
 def get_db_instance():
     url = sqlalchemy.engine.URL.create(
         "postgresql+psycopg2",
-        username=database["user"],
-        password=database["password"],
-        host=database["host"],
-        database=database["db"]
+        username=os.getenv("user"),
+        password=os.getenv("password"),
+        host=os.getenv("host"),
+        database=os.getenv("DB")
     )
     db = sqlalchemy.create_engine(url)
     db.connect()
     table_exists(db, "migrations")
     return db
-
-
-def drop_table(db: Engine, tablename: str):
-    query = "DROP TABLE %s" % tablename
-    db.execute(query)
-
-
-def create_table(db: Engine, tablename: str, values: dict):
-    values_str = ", ".join(f"{k} {v}" for k, v in values.items())
-    query = "CREATE TABLE IF NOT EXISTS %s(id SERIAL PRIMARY KEY, %s)" % (tablename, values_str)
-    db.execute(query)
-
-
-def get_all_entries(db: Engine, tablename):
-    query = "SELECT * FROM %s" % tablename
-    return db.execute(query)
 
 
 def entry_exists(db: Engine, tablename: str, values: dict):
