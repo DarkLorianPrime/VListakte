@@ -25,10 +25,10 @@ async def get_all_entries(db: Database, tablename) -> list:
     return await db.fetch_all(query)
 
 
-async def get_filtered_entries(db: Database, tablename: str, values: dict = None, orderby: str = None) -> list:
+async def get_filtered_entries(db: Database, tablename: str, where: dict = None, orderby: str = None) -> list:
     query = "SELECT * FROM %s " % tablename
-    if values is not None:
-        query += "where %s" % " and ".join(f"{k}='{v}'" for k, v in values.items())
+    if where is not None:
+        query += "where %s" % " and ".join(f"{k}='{v}'" for k, v in where.items())
     if orderby is not None:
         query += f"order by {orderby}"
     return await db.fetch_all(query)
