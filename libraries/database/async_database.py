@@ -44,9 +44,10 @@ class DatabaseORM(Singleton):
         """
         query = "SELECT * FROM %s " % table_name
         if where is not None:
-            query += "where %s" % " and ".join(f"{k}='{v}'" for k, v in values.items())
+            query += "where %s" % " and ".join(f"{k}='{v}'" for k, v in where.items())
         if order_by is not None:
             query += f"order by {order_by}"
+
         return await self.db.fetch_all(query)
 
     async def create_one_entry(self, table_name: str, values: dict) -> None:
@@ -101,12 +102,13 @@ class DatabaseORM(Singleton):
         """
         query_many_set = ""
         if type(values) == list:
-            query_many_set = ", ".join([next(f"{k}='{v}'" for k, v in value.items()) for value in values])
+            query_many_set = [[f"{k}='{v}'" for k, v in value.items()] for value in values][0]
         if type(values) == dict:
             query_many_set = [f'{key} = ' + ', '.join(f'{z} ' for z in value) for key, value in values.items()]
         query_where = " and ".join(f"{k}='{v}'" for k, v in where.items())
-        query_many_set = ''.join(query_many_set)
+        query_many_set = ', '.join(query_many_set)
         query = "UPDATE %s SET %s WHERE %s" % (table_name, query_many_set, query_where)
+        print(query)
         await self.db.fetch_one(query)
 
     async def delete(self, table_name: str, where: dict) -> None:
@@ -141,5 +143,5 @@ class SHAPassword:
         :param username: логин для сравнения (кому принадлежит пароль)
         :return: подошел ли пароль / логин
         """
-        crypted_password = await self.create_password(password)
-        return await DatabaseORM().entry_exists(self.table, {"password": crypted_password, "username": username})
+        encrypted_password = await self.create_password(password)
+        return await DatabaseORM().entry_exists(self.table, {"password": encrypted_password, "username": username})

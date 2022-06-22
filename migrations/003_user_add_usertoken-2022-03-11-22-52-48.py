@@ -3,4 +3,4 @@ def up():
 
 
 def down():
-    return """ALTER TABLE user DROP token"""
+    return """ALTER TABLE users DROP token"""

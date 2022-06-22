@@ -1,25 +1,22 @@
 from databases.backends.postgres import Record
 from fastapi import APIRouter, Depends
-from starlette import status
 from starlette.responses import JSONResponse
 
 from extras.validators import is_auth
-from libraries.database import get_all_entries, get_database_instance, get_filtered_entries
+from extras.values_helper import serializator
+from libraries.database.async_database import DatabaseORM
 
 router = APIRouter()
 
 
 @router.get("/api/v1/getroles/")
 async def get_roles(user: Record = Depends(is_auth)):
-    db = await get_database_instance()
-    roles = await get_filtered_entries(db, "roles_usersaccount", {"user_id": user.id})
-    await db.disconnect()
-    return JSONResponse(status_code=200, content={"response": [dict(role.items()) for role in roles]})
+    roles = await DatabaseORM().get_filtered_entries(table_name="roles_users", where={"user_id": user.id})
+
+    return JSONResponse(status_code=200, content={"response": serializator(roles, need_columns=["role_id", "user_id"])})
 
 
-@router.get("/api/v1/getusers/", status_code=status.HTTP_200_OK)
+@router.get("/api/v1/getusers/")
 async def get_user():
-    db = await get_database_instance()
-    users = await get_all_entries(db, "UserAccount")
-    await db.disconnect()
-    return {"response": users}
+    users = await DatabaseORM().get_all_entries(table_name="Users")
+    return JSONResponse(status_code=200, content={"response": serializator(users, need_columns=["id", "username"])})
