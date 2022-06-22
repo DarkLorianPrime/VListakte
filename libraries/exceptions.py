@@ -1,2 +1,0 @@
-class MigratorError(Exception):
-    pass
