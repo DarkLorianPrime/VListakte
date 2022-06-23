@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, APIRouter
 
 from libraries.database.async_database import DatabaseORM
 from routers.authserver import authroutes, permissionauth
@@ -6,6 +6,7 @@ from routers.blogs import blogs
 from routers.posts import posts
 
 app = FastAPI()
+router = APIRouter(prefix="/api/v1")
 
 
 @app.on_event("startup")
@@ -18,7 +19,8 @@ async def shutdown():
     await DatabaseORM().disconnect()
 
 
-app.include_router(prefix="/api/v1", router=authroutes.router)
-app.include_router(prefix="/api/v1", router=permissionauth.router)
-app.include_router(prefix="/api/v1", router=blogs.router)
-app.include_router(prefix="/api/v1", router=posts.router)
+router.include_router(router=authroutes.router)
+router.include_router(router=permissionauth.router)
+router.include_router(router=blogs.router)
+router.include_router(router=posts.router)
+app.include_router(router=router)
