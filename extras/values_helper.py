@@ -5,12 +5,13 @@ from databases.backends.postgres import Record
 
 def serializator(records: List[Record], limit: int = None, offset: int = None, need_columns: list = None):
     values = []
+
     records = records if len(records) == 1 or not limit or offset is None else records[offset:limit]
 
     for record in records:
         temp_dict = {}
 
-        for key, value in record.items():
+        for key, value in dict(record).items():
             if not need_columns:
                 temp_dict[key] = str(value)
                 continue
