@@ -18,7 +18,7 @@ async def shutdown():
     await DatabaseORM().disconnect()
 
 
-app.include_router(authroutes.router)
-app.include_router(permissionauth.router)
-app.include_router(blogs.router)
-app.include_router(posts.router)
+app.include_router(prefix="/api/v1", router=authroutes.router)
+app.include_router(prefix="/api/v1", router=permissionauth.router)
+app.include_router(prefix="/api/v1", router=blogs.router)
+app.include_router(prefix="/api/v1", router=posts.router)

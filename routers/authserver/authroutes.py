@@ -8,7 +8,7 @@ from libraries.database.async_database import SHAPassword, DatabaseORM
 router = APIRouter()
 
 
-@router.post("/api/v1/registration/")
+@router.post("/registration/")
 async def registration(username: str = Form(...), password: str = Form(...)):
     db = DatabaseORM()
     if await db.entry_exists(table_name="Users", where={"username": username}):
@@ -26,7 +26,7 @@ async def registration(username: str = Form(...), password: str = Form(...)):
     return JSONResponse(status_code=200, content={"response": str(uuid_account)})
 
 
-@router.post("/api/v1/login/")
+@router.post("/login/")
 async def authorization(username: str = Form(...), password: str = Form(...)):
     db = DatabaseORM()
 

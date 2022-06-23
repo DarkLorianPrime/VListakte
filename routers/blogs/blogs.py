@@ -13,14 +13,14 @@ from libraries.database.async_database import DatabaseORM
 router = APIRouter()
 
 
-@router.get("/api/v1/", dependencies=[Depends(is_auth)])
+@router.get("/", dependencies=[Depends(is_auth)])
 async def blog_list(offset: str = Query(0, max_length=50), limit: str = Query(-1, max_length=50)):
     blogs = await DatabaseORM().get_all_entries(table_name="blogs")
 
     return JSONResponse(status_code=200, content=serializer(blogs, offset=int(offset), limit=int(limit)))
 
 
-@router.post("/api/v1/")
+@router.post("/")
 async def blog_create(user: Record = Depends(is_auth),
                       title: str = Form(...),
                       description: str = Form(...),
@@ -45,7 +45,7 @@ async def blog_create(user: Record = Depends(is_auth),
     return JSONResponse(status_code=201, content={"response": create_data})
 
 
-@router.get("/api/v1/{process_id}/", dependencies=[Depends(is_auth)])
+@router.get("/{process_id}/", dependencies=[Depends(is_auth)])
 async def blog_detail(process_id: int):
     db = DatabaseORM()
     blog = await db.get_filtered_entries(table_name="blogs", where={"id": process_id})
@@ -58,7 +58,7 @@ async def blog_detail(process_id: int):
     return JSONResponse(status_code=200, content={"response": {"blog": blog_values, "authors": blog_authors}})
 
 
-@router.patch("/api/v1/{process_id}/", dependencies=[Depends(has_access)])
+@router.patch("/{process_id}/", dependencies=[Depends(has_access)])
 async def blog_update(process_id: int,
                       title: Optional[str] = Form(None),
                       description: Optional[str] = Form(None),
@@ -89,7 +89,7 @@ async def blog_update(process_id: int,
     return JSONResponse(status_code=200, content={"response": "ok", "data": params})
 
 
-@router.delete("/api/v1/{process_id}/", dependencies=[Depends(has_access)])
+@router.delete("/{process_id}/", dependencies=[Depends(has_access)])
 async def blog_delete(process_id: int):
     db = DatabaseORM()
 

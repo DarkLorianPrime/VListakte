@@ -13,7 +13,7 @@ from libraries.database.async_database import DatabaseORM
 router = APIRouter()
 
 
-@router.get("/api/v1/{blog_id}/posts/")
+@router.get("/{blog_id}/posts/")
 async def get_all_posts(request: Request,
                         blog_id: int,
                         user: Record = Depends(is_auth),
@@ -43,7 +43,7 @@ async def get_all_posts(request: Request,
     return JSONResponse(status_code=200, content=return_dict)
 
 
-@router.post("/api/v1/{process_id}/posts/")
+@router.post("/{process_id}/posts/")
 async def create_post(process_id: int,
                       user: Record = Depends(has_access),
                       title: str = Form(...),
@@ -62,7 +62,7 @@ async def create_post(process_id: int,
     return JSONResponse(status_code=200, content={key: str(value) for key, value in values.items()})
 
 
-@router.delete("/api/v1/{process_id}/posts/{post_id}/", dependencies=[Depends(has_access)])
+@router.delete("/{process_id}/posts/{post_id}/", dependencies=[Depends(has_access)])
 async def delete_post(process_id: int, post_id: int):
     db = DatabaseORM()
 
@@ -74,7 +74,7 @@ async def delete_post(process_id: int, post_id: int):
     return JSONResponse(status_code=200, content={"response": "ok"})
 
 
-@router.patch("/api/v1/{process_id}/posts/{post_id}/", dependencies=[Depends(has_access)])
+@router.patch("/{process_id}/posts/{post_id}/", dependencies=[Depends(has_access)])
 async def update_post(process_id: int,
                       post_id: int,
                       title: Optional[str] = Form(None),
@@ -96,7 +96,7 @@ async def update_post(process_id: int,
     return JSONResponse(status_code=200, content={"response": "ok", "data": params})
 
 
-@router.get("/api/v1/{process_id}/posts/{post_id}/")
+@router.get("/{process_id}/posts/{post_id}/")
 async def get_one_post(request: Request, process_id: int, post_id: int, user: Record = Depends(is_auth)):
     db = DatabaseORM()
     returned_values = {"is_access": False}
@@ -119,7 +119,7 @@ async def get_one_post(request: Request, process_id: int, post_id: int, user: Re
     return JSONResponse(status_code=200, content={"response": returned_values})
 
 
-@router.post("/api/v1/{process_id}/posts/{post_id}/like/")
+@router.post("/{process_id}/posts/{post_id}/like/")
 async def post_like(process_id: int, post_id: int, user: Record = Depends(is_auth)):
     db = DatabaseORM()
 
@@ -135,7 +135,7 @@ async def post_like(process_id: int, post_id: int, user: Record = Depends(is_aut
     return JSONResponse(status_code=200, content={"response": "ok"})
 
 
-@router.get("/api/v1/posts/last/", dependencies=[Depends(is_auth)])
+@router.get("/posts/last/", dependencies=[Depends(is_auth)])
 async def post_last(offset: str = Query(0, max_length=50), limit: str = Query(-1, max_length=50)):
     db = DatabaseORM()
     posts = await db.get_filtered_entries(table_name="posts", where={"is_published": True}, order_by="created_at desc")
@@ -144,7 +144,7 @@ async def post_last(offset: str = Query(0, max_length=50), limit: str = Query(-1
     return JSONResponse(status_code=200, content={"response": returned_dict})
 
 
-@router.get("/api/v1/{process_id}/posts/{post_id}/commentaries/")
+@router.get("/{process_id}/posts/{post_id}/commentaries/")
 async def get_all_commentaries(post_id: int, offset: str = Query(0, max_length=50),
                                limit: str = Query(-1, max_length=50), user: Record = Depends(is_auth)):
     db = DatabaseORM()
@@ -167,7 +167,7 @@ async def get_all_commentaries(post_id: int, offset: str = Query(0, max_length=5
     return JSONResponse(status_code=200, content=returned)
 
 
-@router.post("/api/v1/{process_id}/posts/{post_id}/commentaries/{comment_id}/like/")
+@router.post("/{process_id}/posts/{post_id}/commentaries/{comment_id}/like/")
 async def like_commentary(post_id: int, process_id: int, comment_id: int, user: Record = Depends(is_auth)):
     db = DatabaseORM()
 
@@ -184,7 +184,7 @@ async def like_commentary(post_id: int, process_id: int, comment_id: int, user: 
     return JSONResponse(status_code=200, content={"response": "ok"})
 
 
-@router.post("/api/v1/{process_id}/posts/{post_id}/commentaries/")
+@router.post("/{process_id}/posts/{post_id}/commentaries/")
 async def create_commentary(process_id: int, post_id: int, text: str = Form(None), user: Record = Depends(is_auth)):
     db = DatabaseORM()
 
