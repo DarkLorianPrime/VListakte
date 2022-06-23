@@ -3,7 +3,7 @@ from typing import List
 from databases.backends.postgres import Record
 
 
-def serializator(records: List[Record], limit: int = None, offset: int = None, need_columns: list = None):
+def serializer(records: List[Record], limit: int = None, offset: int = None, need_columns: list = None):
     values = []
 
     records = records if len(records) == 1 or not limit or offset is None else records[offset:limit]

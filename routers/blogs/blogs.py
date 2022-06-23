@@ -7,7 +7,7 @@ from fastapi import APIRouter, Query, Form, HTTPException, Depends
 from starlette.responses import JSONResponse
 
 from extras.validators import has_access, is_auth
-from extras.values_helper import serializator
+from extras.values_helper import serializer
 from libraries.database.async_database import DatabaseORM
 
 router = APIRouter()
@@ -17,7 +17,7 @@ router = APIRouter()
 async def blog_list(offset: str = Query(0, max_length=50), limit: str = Query(-1, max_length=50)):
     blogs = await DatabaseORM().get_all_entries(table_name="blogs")
 
-    return JSONResponse(status_code=200, content=serializator(blogs, offset=int(offset), limit=int(limit)))
+    return JSONResponse(status_code=200, content=serializer(blogs, offset=int(offset), limit=int(limit)))
 
 
 @router.post("/api/v1/")
@@ -52,8 +52,8 @@ async def blog_detail(process_id: int):
 
     blog_authors = await db.get_filtered_entries(table_name="blog_authors", where={"blog_id": process_id})
 
-    blog_values = serializator(blog)
-    blog_authors = serializator(blog_authors, need_columns=["author_id"])
+    blog_values = serializer(blog)
+    blog_authors = serializer(blog_authors, need_columns=["author_id"])
 
     return JSONResponse(status_code=200, content={"response": {"blog": blog_values, "authors": blog_authors}})
 
