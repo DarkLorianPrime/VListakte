@@ -1,8 +1,8 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 from databases.backends.postgres import Record
-from fastapi import APIRouter, Depends, Form, HTTPException, Query
+from fastapi import APIRouter, Depends, Form, HTTPException
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -13,11 +13,8 @@ from libraries.database.async_database import DatabaseORM
 router = APIRouter()
 
 
-@router.get("/{blog_id}/posts/")
-async def get_all_posts(request: Request,
-                        blog_id: int,
-                        user: Record = Depends(is_auth),
-                        published: bool = True):
+@router.get("/api/v1/{blog_id}/posts/")
+async def get_all_posts(request: Request, blog_id: int, user: Record = Depends(is_auth), published: bool = True):
     db = DatabaseORM()
     return_dict = {"is_access": False, "posts": []}
     where_dict = {"blog_id": blog_id, "is_published": True}
@@ -29,7 +26,7 @@ async def get_all_posts(request: Request,
     posts = await db.get_filtered_entries(table_name="posts", where=where_dict)
 
     for post in [post for post in posts]:
-        post_data = dict(post).items()
+        post_data = post.items()
 
         where = {"post_id": dict(post_data)["id"], "user_id": user.id}
         posts_likes = await db.entry_exists(table_name="post_likes", where=where)
@@ -43,7 +40,7 @@ async def get_all_posts(request: Request,
     return JSONResponse(status_code=200, content=return_dict)
 
 
-@router.post("/{process_id}/posts/")
+@router.post("/api/v1/{process_id}/posts/")
 async def create_post(process_id: int,
                       user: Record = Depends(has_access),
                       title: str = Form(...),
@@ -62,7 +59,7 @@ async def create_post(process_id: int,
     return JSONResponse(status_code=200, content={key: str(value) for key, value in values.items()})
 
 
-@router.delete("/{process_id}/posts/{post_id}/", dependencies=[Depends(has_access)])
+@router.delete("/api/v1/{process_id}/posts/{post_id}/", dependencies=[Depends(has_access)])
 async def delete_post(process_id: int, post_id: int):
     db = DatabaseORM()
 
@@ -74,7 +71,7 @@ async def delete_post(process_id: int, post_id: int):
     return JSONResponse(status_code=200, content={"response": "ok"})
 
 
-@router.patch("/{process_id}/posts/{post_id}/", dependencies=[Depends(has_access)])
+@router.patch("/api/v1/{process_id}/posts/{post_id}/", dependencies=[Depends(has_access)])
 async def update_post(process_id: int,
                       post_id: int,
                       title: Optional[str] = Form(None),
@@ -96,7 +93,7 @@ async def update_post(process_id: int,
     return JSONResponse(status_code=200, content={"response": "ok", "data": params})
 
 
-@router.get("/{process_id}/posts/{post_id}/")
+@router.get("/api/v1/{process_id}/posts/{post_id}/")
 async def get_one_post(request: Request, process_id: int, post_id: int, user: Record = Depends(is_auth)):
     db = DatabaseORM()
     returned_values = {"is_access": False}
@@ -119,12 +116,13 @@ async def get_one_post(request: Request, process_id: int, post_id: int, user: Re
     return JSONResponse(status_code=200, content={"response": returned_values})
 
 
-@router.post("/{process_id}/posts/{post_id}/like/")
-async def post_like(process_id: int, post_id: int, user: Record = Depends(is_auth)):
-    db = DatabaseORM()
+@router.post("/api/v1/{process_id}/posts/{post_id}/like")
+async def post_like(process_id: int,
+                    post_id: int,
+                    user: Record = Depends(is_auth),
+                    db=DatabaseORM()):
 
-    if not await db.entry_exists(table_name="posts",
-                                 where={"id": post_id, "blog_id": process_id, "is_published": True}):
+    if not await db.entry_exists(table_name="posts", where={"id": post_id, "blog_id": process_id}):
         raise HTTPException(status_code=404, detail={"error": "Post not found."})
 
     if not await db.entry_exists(table_name="post_likes", where={"post_id": post_id, "user_id": user.id}):
@@ -135,64 +133,8 @@ async def post_like(process_id: int, post_id: int, user: Record = Depends(is_aut
     return JSONResponse(status_code=200, content={"response": "ok"})
 
 
-@router.get("/posts/last/", dependencies=[Depends(is_auth)])
-async def post_last(offset: str = Query(0, max_length=50), limit: str = Query(-1, max_length=50)):
-    db = DatabaseORM()
-    posts = await db.get_filtered_entries(table_name="posts", where={"is_published": True}, order_by="created_at desc")
+@router.get("/api/v1/posts/last/", dependencies=[Depends(is_auth)])
+async def post_last(db=DatabaseORM()):
+    posts = await db.get_filtered_entries(table_name="posts", order_by="created_at desc")
 
-    returned_dict = serializer(posts, limit=int(limit), offset=int(offset))
-    return JSONResponse(status_code=200, content={"response": returned_dict})
-
-
-@router.get("/{process_id}/posts/{post_id}/commentaries/")
-async def get_all_commentaries(post_id: int, offset: str = Query(0, max_length=50),
-                               limit: str = Query(-1, max_length=50), user: Record = Depends(is_auth)):
-    db = DatabaseORM()
-    commentaries = await db.get_filtered_entries(table_name="post_commentaries", where={"post_id": post_id})
-    returned_dict = []
-
-    for comment in commentaries:
-
-        comment = dict(comment)
-        is_liked = await db.entry_exists(table_name="post_commentary_likes",
-                                         where={"user_id": user.id, "comment_id": comment["id"]})
-
-        temp_dict = {"comment": comment, "is_liked": is_liked}
-        returned_dict.append(temp_dict)
-
-    returned = returned_dict[int(offset):int(limit)]
-    if limit == -1 and len(returned_dict) == 1:
-        returned = returned_dict[0]
-
-    return JSONResponse(status_code=200, content=returned)
-
-
-@router.post("/{process_id}/posts/{post_id}/commentaries/{comment_id}/like/")
-async def like_commentary(post_id: int, process_id: int, comment_id: int, user: Record = Depends(is_auth)):
-    db = DatabaseORM()
-
-    if not await db.entry_exists(table_name="posts", where={"id": post_id, "blog_id": process_id}):
-        raise HTTPException(status_code=404, detail={"error": "Post not found."})
-
-    if not await db.entry_exists(table_name="post_commentary_likes",
-                                 where={"comment_id": comment_id, "user_id": user.id}):
-        await db.create_one_entry(table_name="post_commentary_likes",
-                                  values={"comment_id": comment_id, "user_id": user.id})
-        return JSONResponse(status_code=200, content={"response": "ok"})
-
-    await db.delete(table_name="post_likes", where={"comment_id": comment_id, "user_id": user.id})
-    return JSONResponse(status_code=200, content={"response": "ok"})
-
-
-@router.post("/{process_id}/posts/{post_id}/commentaries/")
-async def create_commentary(process_id: int, post_id: int, text: str = Form(None), user: Record = Depends(is_auth)):
-    db = DatabaseORM()
-
-    if not await db.entry_exists(table_name="posts",
-                                 where={"id": post_id, "blog_id": process_id, "is_published": True}):
-        raise HTTPException(status_code=404, detail={"error": "Post not found."})
-
-    create_data = {"post_id": post_id, "author_id": user.id, "text": text}
-
-    await db.create_one_entry(table_name="post_commentaries", values=create_data)
-    return JSONResponse(status_code=200, content=create_data)
+    return JSONResponse(status_code=200, content={"response": serializer(posts, limit=5)})

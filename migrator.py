@@ -134,7 +134,7 @@ def createmigration(args: list) -> None:
     :return: None
     """
     if len(args) != 3:
-        raise MigratorError("Please specify the migration ID (for example: 001_cerera)")
+        raise MigratorError("Please specify the migration ID (for examples: 001_cerera)")
     shutil.copy("libraries/examples/migration_example.py",
                 f"migrations/{args[2]}-{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}.py")
 

@@ -145,3 +145,5 @@ class SHAPassword:
         """
         encrypted_password = await self.create_password(password)
         return await DatabaseORM().entry_exists(self.table, {"password": encrypted_password, "username": username})
+
+
