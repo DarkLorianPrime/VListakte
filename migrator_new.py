@@ -8,6 +8,7 @@ from datetime import datetime
 from libraries.database.database_migrator import MigratorORM
 from libraries.database.new.field_types import ManyToMany
 from libraries.database.new.models import Model
+from libraries.utils.exceptions import MigratorError
 from libraries.utils.files import startswith_check_file, endswith_check_file
 
 
@@ -55,7 +56,7 @@ class Migrate:
     def get_last_migration(self):
         return os.listdir(self.folder)[-2].split("_")[0]
 
-    def migrate(self):
+    def migrate(self, _):
         migrator = MigratorORM()
 
         self.prefirstmigrate()
@@ -73,7 +74,7 @@ class Migrate:
 
         migrator.disconnect()
 
-    def make_migrations(self):
+    def make_migrations(self, _):
         migrator = MigratorORM()
         self.prefirstmigrate()
 
@@ -82,6 +83,7 @@ class Migrate:
         classes.sort(key=self.linenumber_of_member)
         filtered_classes = list(filter(lambda x: x[1] in Model.__subclasses__(), classes))
         last_element = int(self.get_last_migration())
+
         for filtered_class in filtered_classes:
             mtm = False
             migration_id = "".join(list("000")[:-len(str(last_element))]) + str(last_element := last_element + 1)
@@ -121,9 +123,90 @@ class Migrate:
 
             print(f"create {file_name}")
 
+    def rollback_common(self) -> list:
+        """
+        :return: list of entries that can be rolled back.
+        Description: General method
+        """
+        db = MigratorORM()
+        if not db.table_exists(self.folder):
+            raise MigratorError("No migration was applied.")
+
+        data = db.get_filtered_entries("migrations", None, "timestamp desc")
+        return data
+
+    def rollback_all(self, _) -> None:
+        """
+        :param _: Not used in this function
+        :return: None.
+        Description: Rolls back all migrations
+        """
+        db = MigratorORM()
+        db.connect()
+        self.prefirstmigrate()
+        data = self.rollback_common()
+        for entry in data:
+            module = importlib.import_module(entry[1])
+            db.db.execute(module.down())
+            db.delete_migration(entry[1])
+
+    def rollback(self, args: list) -> None:
+        """
+        :param args: Allows you to take the necessary arguments
+        :return: None.
+        Description: Rolls back the last migration, or if --step=N is specified, rolls back the last N migrations.
+        """
+
+        data = self.rollback_common()
+        steps = 1
+        db = MigratorORM()
+        db.connect()
+        if len(args) == 3:
+            steps_timely = args[2].split("=")[1]
+            if steps_timely.isdigit():
+                steps = int(steps_timely)
+
+        steps = len(data) if steps > len(data) else steps
+
+        for step in range(0, steps):
+            module = importlib.import_module(data[step][1])
+            db.db.execute(module.down())
+            db.delete_migration(data[step][1])
+
+    def refresh(self, _) -> None:
+        """
+        :return: None.
+        Description: First deletes all migrations, then rolls them again.
+        """
+
+        try:
+            self.rollback_all(_)
+        except MigratorError as e:
+            print(e)
+        self.migrate(_)
+
 
 sys.path.append("migrations1")
-MigratorORM().connect()
-Migrate().make_migrations()
-#Migrate().get_last_migration()
-Migrate().migrate()
+
+mgr = Migrate()
+command = {
+    "rollback": mgr.rollback,
+    "reset": mgr.rollback_all,
+    "migrate": mgr.migrate,
+    "refresh": mgr.refresh,
+    "makemigrations": mgr.make_migrations
+}
+
+
+def main() -> None:
+    sys.path.append("migrations")
+    args = sys.argv
+    if len(args) < 2:
+        raise MigratorError("Too few arguments.")
+    MigratorORM().connect()
+    command[args[1]](args)
+    MigratorORM().disconnect()
+
+
+if __name__ == "__main__":
+    main()
