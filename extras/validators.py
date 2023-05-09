@@ -1,35 +1,37 @@
+import re
 from typing import Optional
 
 from fastapi import HTTPException, Header
 from starlette.requests import Request
 
-from libraries.database.async_database import DatabaseORM
+from routers.authserver.models import User, UserRoles
+from routers.blogs.models import Blog
 
 
 async def has_access(request: Request, process_id: Optional[int], raise_exception: bool = True) -> bool:
     user = await is_auth(request.headers.get("authorization"))
-    db = DatabaseORM()
-    if await db.entry_exists(table_name="blogs", where={"owner_id": user.id, "id": process_id}):
+    is_admin = await UserRoles.objects().filter(UserRoles.role_id == user.id).exists()
+    is_owner = await Blog.objects().filter(Blog.owner_id == user.id, Blog.id == process_id)
+    if is_owner or is_admin:
         return user
-    if await db.entry_exists(table_name="roles_users", where={"user_id": user.id, "role_id": 2}):
-        return user
+
     if raise_exception:
-        raise HTTPException(status_code=400, detail={
-            "error": "You do not have permission to interact with this blog, or the blog does not exists."})
+        raise HTTPException(status_code=400, detail="You do not have permission to interact with this blog, or the blog does not exists")
+
     return False
 
 
 async def is_auth(authorization: str = Header(None)):
     if authorization is None:
-        raise HTTPException(status_code=401, detail={"error": "get token for headers"})
+        raise HTTPException(status_code=401, detail="Place token to header")
 
-    token = authorization.split(" ")
-    if len(token) != 2:
-        raise HTTPException(status_code=401, detail={"error": "get token for headers"})
+    regex = r"^token ([\d\w]{8}-[\d\w]{4}-[\d\w]{4}-[\d\w]{4}-[\d\w]{12})$" # check access_token on uuid verified
+    token = re.match(regex, authorization, re.IGNORECASE)
+    if token is None:
+        raise HTTPException(status_code=401, detail="Invalidate access_token")
+    account = await User.objects().filter(User.token == token.group(1)).first()
 
-    account = await DatabaseORM().get_filtered_entries(table_name="Users", where={"token": token[1]})
+    if account is None:
+        raise HTTPException(status_code=401, detail="Invalidate access_token")
 
-    if not account:
-        raise HTTPException(status_code=401, detail={"error": "Account with this token does not exists"})
-
-    return account[0]
+    return account
