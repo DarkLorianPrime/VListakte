@@ -3,5 +3,5 @@ def up():
 
 
 def down():
-    return "DROP TABLE migrations"
+    return "DROP TABLE IF EXISTS migrations"
 

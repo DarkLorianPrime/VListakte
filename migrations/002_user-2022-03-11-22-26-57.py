@@ -3,4 +3,4 @@ def up():
 
 
 def down():
-    return """DROP TABLE Users"""
+    return """DROP TABLE IF EXISTS Users"""
