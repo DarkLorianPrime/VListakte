@@ -22,14 +22,6 @@ class Query:
         self._order = ""
         asyncio.create_task(self._generate_query())
 
-    @classmethod
-    async def async_init(cls, model_name, query=None):
-        self = Query(model_name, query)
-        return self
-
-    async def _send_transaction(self):
-        pass
-
     async def _generate_query(self):
         self._end_query = f"select * from \"{self._model_name}\" "
         self._end_query += self._get_where()
@@ -155,7 +147,6 @@ class Query:
         updated = ", ".join(f"\"{k}\"=:{k}" for k, v in values.items())
         query = f"UPDATE {self._model_name} SET {updated} {where}"
         values.update(self._where_params)
-        print(values, query)
         return await db.execute(query, values)
 
 

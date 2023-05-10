@@ -1,5 +1,5 @@
 import datetime
-from typing import Type, Literal, Any, Union
+from typing import Type, Literal, Any, Union, List
 from uuid import UUID
 
 
@@ -100,3 +100,9 @@ class TimestampField(Field):
 
 def _or(string_param):
     return f" OR {string_param}"
+
+
+def _in(field: Field, values: List):
+    name = field.owner.tablename or field.owner.__name__
+    values = ", ".join(values)
+    return [f'"{name.lower()}"."{field.var_name}" IN ({values})', {}]
