@@ -37,7 +37,6 @@ async def authorization(username: str = Form(...), password: str = Form(...)):
 @router.get("/get/roles/", status_code=200)
 async def get_roles(user: Record = Security(is_auth)):
     roles = await UserRoles.objects().filter(UserRoles.user_id == user.id).all().values("role_id", "user_id")
-
     return roles
 
 

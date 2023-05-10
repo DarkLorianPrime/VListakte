@@ -1,5 +1,6 @@
 from libraries.orm.core import Model
-from libraries.orm.fields import SerialField, StringField, TextField, BooleanField, TimestampField, IntegerField
+from libraries.orm.fields import SerialField, StringField, TextField, BooleanField, TimestampField, IntegerField, \
+    UUIDField
 
 
 class Post(Model):
@@ -10,4 +11,4 @@ class Post(Model):
     is_published = BooleanField()
     created_at = TimestampField()
     author_id = IntegerField()
-    blog_id = IntegerField()
+    blog_id = UUIDField()

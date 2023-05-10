@@ -9,7 +9,6 @@ router = APIRouter(prefix="/api/v1")
 
 
 router.include_router(router=routers.router)
-# router.include_router(router=permissionauth.router)
-# router.include_router(router=blogs.router)
+router.include_router(router=blogs.router)
 # router.include_router(router=posts.router)
 app.include_router(router=router)

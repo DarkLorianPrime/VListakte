@@ -16,4 +16,4 @@ class BlogAuthors(Model):
     tablename = "blog_authors"
     id = SerialField()
     author_id = IntegerField()
-    blog_id = IntegerField()
+    blog_id = UUIDField()
