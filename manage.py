@@ -196,7 +196,6 @@ async def main() -> None:
 
     except Exception as e:
         print(traceback.format_exc())
-        await db.disconnect()
     finally:
         await db.disconnect()
 
