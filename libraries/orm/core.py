@@ -13,6 +13,7 @@ class Query:
     _order = ""
 
     def __init__(self, model_name, query=None):
+        self.group = ""
         self.result = None
         self._query = []
         if query is not None:
@@ -26,6 +27,7 @@ class Query:
         self._end_query = f"select * from \"{self._model_name}\" "
         self._end_query += self._get_where()
         self._end_query += self._order
+        self._end_query += self.group
         return self
 
     def order_by(self, field, side: Literal["asc", "desc", "DESC", "ASC"]):
@@ -40,7 +42,7 @@ class Query:
         query = self._end_query
 
         if params:
-            params = list(map(lambda param: f"\"{param}\"", params))
+            params = list(map(lambda param: f"\"{param}\"" if "count" not in param else param, params))
             query = query.replace("*", ", ".join(params))
 
         result = await db.fetch_all(query, self._where_params)
@@ -141,6 +143,10 @@ class Query:
             return await db.fetch_all(query, insert_dict)
 
         return await db.execute(query, insert_dict)
+
+    def group_by(self, *fields):
+        self.group = f" group by {', '.join(fields)}"
+        return self
 
     async def update(self, values: dict) -> Optional[Record]:
         where = self._get_where()
