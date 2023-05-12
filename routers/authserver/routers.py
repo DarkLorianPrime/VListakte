@@ -1,46 +1,51 @@
 import uuid
+from typing import List, Dict
 
 from databases.backends.postgres import Record
-from fastapi import APIRouter, Form, HTTPException, Security
-from starlette.status import HTTP_422_UNPROCESSABLE_ENTITY, HTTP_200_OK, HTTP_201_CREATED, HTTP_400_BAD_REQUEST
+from fastapi import APIRouter, Security, Depends, HTTPException
+from starlette.status import HTTP_200_OK, HTTP_201_CREATED, HTTP_422_UNPROCESSABLE_ENTITY
 
 from extras.validators import is_auth
-from routers.authserver.models import User, UserRoles
+from routers.authserver.pydantic_models import TokenResponseModel, TokenModel, RolesResponseModel, UsersResponseModel
+from routers.authserver.repositories import UserRepository
+from routers.authserver.responses import ErrorResponses
 
-# HELLO!
 
 router = APIRouter()
+err_resp = ErrorResponses()
 
 
-@router.post("/registration/", status_code=HTTP_201_CREATED)
-async def registration(username: str = Form(...), password: str = Form(...)):
-    if await User.objects().filter(User.username == username).exists():
-        raise HTTPException(status_code=HTTP_422_UNPROCESSABLE_ENTITY, detail="Username already exists")
+@router.post("/registration/",
+             status_code=HTTP_201_CREATED,
+             response_model=TokenResponseModel)
+async def registration(token: TokenModel = Depends(TokenModel.to_form),
+                       repository: UserRepository = Depends(UserRepository)):
+    if await repository.is_username_exists(token.username):
+        raise HTTPException(status_code=HTTP_422_UNPROCESSABLE_ENTITY, detail=err_resp.USERNAME_EXISTS)
 
-    hashed_password = User.create_password(password)
-    access_token = uuid.uuid4()
-    user = await User.objects().insert("id", username=username, password=hashed_password, token=access_token)
-    await UserRoles.objects().insert(role_id=1, user_id=user.id)
-    return {"access_token": str(access_token)}
-
-
-@router.post("/login/", status_code=HTTP_200_OK)
-async def authorization(username: str = Form(...), password: str = Form(...)):
-    instance = await User.valid_password(username=username, clear_password=password)
-
-    if instance:
-        return {"access_token": str(instance.token)}
-
-    raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail="Username or password not found")
+    access_token: uuid.UUID = await repository.create_account(username=token.username, clear_password=token.password)
+    return {"access_token": access_token}
 
 
-@router.get("/get/roles/", status_code=HTTP_200_OK)
-async def get_roles(user: Record = Security(is_auth)):
-    roles = await UserRoles.objects().filter(UserRoles.user_id == user.id).all().values("role_id", "user_id")
-    return roles
+@router.post("/login/",
+             status_code=HTTP_200_OK,
+             response_model=TokenResponseModel)
+async def authorization(token: TokenModel = Depends(TokenModel.to_form),
+                        repository: UserRepository = Depends(UserRepository)):
+    token: uuid.UUID = await repository.validate_token(username=token.username, password=token.password)
+    return {"access_token": token}
 
 
-@router.get("/get/users/", status_code=HTTP_200_OK)
-async def get_user():
-    users = await User.objects().all().values("id", "username")
-    return users
+@router.get("/get/roles/",
+            status_code=HTTP_200_OK,
+            response_model=RolesResponseModel)
+async def get_roles(user: Record = Security(is_auth),
+                    repository: UserRepository = Depends(UserRepository)):
+    return {"roles_ids": await repository.get_roles(user=user)}
+
+
+@router.get("/get/users/",
+            status_code=HTTP_200_OK,
+            response_model=List[UsersResponseModel])
+async def get_user(repository: UserRepository = Depends(UserRepository)):
+    return await repository.get_users()

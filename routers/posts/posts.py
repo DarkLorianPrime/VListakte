@@ -25,14 +25,22 @@ async def get_all_posts(request: Request, blog_id: uuid.UUID, user: Record = Dep
 
     likes = await PostLike.filter(_in(PostLike.post_id, posts_ids), PostLike.user_id == user.id).all().values("post_id")
     likes_ids = [like.post_id for like in likes]
+    all_likes = await PostLike.objects().group_by("post_id").values("post_id", "count(id)")
 
     views = await PostView.filter(_in(PostView.post_id, posts_ids), PostView.user_id == user.id).all().values("post_id")
     views_ids = [view.post_id for view in views]
+    all_views = await PostView.objects().group_by("post_id").values("post_id", "count(id)")
 
     for post in posts:
         post = dict(post)
+        likes = {"count": x["count"] for x in all_likes if x.post_id == post["id"]}
+        views = {"count": x["count"] for x in all_views if x.post_id == post["id"]}
+
         post["is_liked"] = post["id"] in likes_ids
         post["is_viewed"] = post["id"] in views_ids
+
+        post["likes"] = likes.get("count", 0)
+        post["views"] = views.get("count", 0)
         return_dict["posts"].append(post)
 
     return return_dict
@@ -131,5 +139,5 @@ async def post_like(process_id: uuid.UUID,
 @router.get("/posts/last/", dependencies=[Depends(is_auth)], status_code=HTTP_200_OK)
 async def post_last():
     posts = Post.objects().order_by(Post.created_at, "DESC").all()[:5]
-
     return posts
+
