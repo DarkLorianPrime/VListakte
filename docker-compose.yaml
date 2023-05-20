@@ -20,6 +20,8 @@ services:
       basic:
 
   backend:
+    depends_on:
+      - database
     build: backend
     environment:
       <<: *x-postgres-environment
