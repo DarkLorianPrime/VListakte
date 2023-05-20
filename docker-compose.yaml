@@ -23,6 +23,7 @@ services:
     build: backend
     environment:
       <<: *x-postgres-environment
+      SECURITY_TOKEN: ${SECURITY_TOKEN}
     ports:
       - "8001:8000"
     volumes:
