@@ -1,109 +1,113 @@
-import traceback
 import uuid
 from datetime import datetime
-from typing import Optional, Union, Dict, Any
+from typing import Dict, Any, List, Set
 
 from databases.backends.postgres import Record
-from fastapi import APIRouter, Query, Form, HTTPException, Depends
-from starlette.responses import JSONResponse
+from fastapi import APIRouter, Query, HTTPException, Depends
 from starlette.status import HTTP_200_OK, HTTP_201_CREATED, HTTP_422_UNPROCESSABLE_ENTITY, HTTP_404_NOT_FOUND, \
     HTTP_204_NO_CONTENT
 
 from extras.validators import has_access, is_auth
-from extras.values_helper import serializer
-from routers.authserver.models import User
-from routers.blogs.models import Blog, BlogAuthors
-from routers.posts.models import Post
+from routers.blogs.pydantic_models import BlogPatchModel, BlogInsertModel, BlogPatchResponseModel, \
+    RetrieveResponseModel, BlogRetrieveResponseModel, CreateResponseModel
+from routers.blogs.repositories import BlogRepository, BlogAuthorsRepository
+from routers.blogs.responses import ErrorResponses
 
 router = APIRouter()
+err_response = ErrorResponses
 
 
-@router.get("/", dependencies=[Depends(is_auth)], status_code=HTTP_200_OK)
-async def blog_list(offset: str = Query(0, max_length=50), limit: str = Query(-1, max_length=50)):
-    return Blog.objects().all()[int(offset):int(limit)]
+@router.get("/",
+            dependencies=[Depends(is_auth)],
+            status_code=HTTP_200_OK,
+            response_model=List[BlogRetrieveResponseModel])
+async def blog_list(offset: int = Query(0), limit: int = Query(25),
+                    repository: BlogRepository = Depends(BlogRepository)):
+    return await repository.get_all_blogs(offset, limit)
 
 
-@router.post("/", status_code=HTTP_201_CREATED)
+@router.post("/",
+             status_code=HTTP_201_CREATED,
+             response_model=CreateResponseModel)
 async def blog_create(user: Record = Depends(is_auth),
-                      title: str = Form(...),
-                      description: str = Form(...),
-                      authors: Optional[str] = Form(None)):
-    if await Blog.objects().filter(Blog.owner_id == user.id, Blog.title == title).exists():
-        raise HTTPException(status_code=HTTP_422_UNPROCESSABLE_ENTITY, detail="Blog with this title already exists")
+                      blog: BlogInsertModel = Depends(BlogInsertModel.to_form),
+                      repository: BlogRepository = Depends(BlogRepository)):
+    if await repository.check_blog_exists_title(title=blog.title, user=user):
+        raise HTTPException(status_code=HTTP_422_UNPROCESSABLE_ENTITY, detail=err_response.TITLE_EXISTS)
 
     time = datetime.now()
-    values = {"owner_id": user.id,
-              "title": title,
-              "created_at": time,
-              "description": description,
-              "updated_at": time,
-              "id": str(uuid.uuid4())}
+    dict_blog = blog.dict(exclude_unset=True)
+    blog_id = uuid.uuid4()
+    dict_blog.update({
+        "owner_id": user.id,
+        "created_at": time,
+        "updated_at": time,
+        "id": blog_id
+    })
 
-    blog = await Blog.objects().insert("id", **values)
+    await repository.create_blog(dict_blog)
 
-    if authors:
+    if "authors" in dict_blog:
         try:
-            authors_values = [{"blog_id": blog.id, "author_id": int(element)}
-                              for element in authors.split(", ") if await User.filter(User.id == int(element)).exists()]
-            authors = await BlogAuthors.objects().insert_many(authors_values, "author_id")
+            await repository.delete_authors(blog_id)
+            authors_set = set(map(int, dict_blog["authors"].split(",")))
+            ids: List[Record] | List = await repository.insert_authors(blog_id=blog_id, users=authors_set)
+            dict_blog["authors"] = [author.author_id for author in ids]
         except ValueError:
-            raise HTTPException(status_code=HTTP_422_UNPROCESSABLE_ENTITY,
-                                detail="Invalid authors format. Try again with format: 1, 2, 3")
+            raise HTTPException(status_code=HTTP_422_UNPROCESSABLE_ENTITY, detail=err_response.INVALID_AUTHORS)
 
-    create_data = {key: str(value) for key, value in values.items()}
-    create_data["id"] = blog.id
-    if authors:
-        create_data["authors_id"] = [instance.author_id for instance in authors]
-
-    return create_data
+    return dict_blog
 
 
-@router.get("/{process_id}/", dependencies=[Depends(is_auth)], status_code=HTTP_200_OK)
-async def blog_detail(process_id: uuid.UUID):
-    blog = await Blog.filter(Blog.id == process_id).first()
+@router.get("/{blog_id}/",
+            dependencies=[Depends(is_auth)],
+            status_code=HTTP_200_OK,
+            response_model=RetrieveResponseModel)
+async def blog_detail(blog_id: uuid.UUID,
+                      repository: BlogRepository = Depends(BlogRepository),
+                      authors_repository: BlogAuthorsRepository = Depends(BlogAuthorsRepository)):
+    blog: Record | None = await repository.get_one_blog_by_id(blog_id)
 
     if blog is None:
-        raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="blog with this ID not found")
+        raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=err_response.ID_NOT_FOUND)
 
-    blog_authors = await BlogAuthors.filter(BlogAuthors.blog_id == process_id).all().values("author_id")
+    blog_authors: List[int] = await authors_repository.get_blog_authors_ids(blog_id)
     return {"blog": blog, "authors": blog_authors}
 
 
-@router.patch("/{process_id}/", dependencies=[Depends(has_access)], response_model=None, status_code=HTTP_200_OK)
-async def blog_update(process_id: uuid.UUID,
-                      title: Optional[str] = Form(None),
-                      description: Optional[str] = Form(None),
-                      authors: Optional[str] = Form(None)) -> Union[HTTPException, Dict[str, Any]]:
+@router.patch("/{blog_id}/",
+              dependencies=[Depends(has_access)],
+              status_code=HTTP_200_OK,
+              response_model=BlogPatchResponseModel)
+async def blog_update(blog_id: uuid.UUID,
+                      blog: BlogPatchModel = Depends(BlogPatchModel.to_form),
+                      repository: BlogRepository = Depends(BlogRepository)):
+    if not await repository.check_blog_exists_by_id(blog_id=blog_id):
+        raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=err_response.ID_NOT_FOUND)
 
-    if not await Blog.filter(Blog.id == process_id).exists():
-        raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="blog with this ID not found")
+    dict_blog: Dict[str, Any] = blog.dict(exclude_unset=True)
+    dict_blog["updated_at"] = datetime.now()
 
-    params = {
-        "updated_at": datetime.now(),
-    }
+    if "title" in dict_blog or "description" in dict_blog:
+        await repository.update_blog(blog_id=blog_id, parameters=dict_blog)
 
-    if title:
-        params["title"] = title
+    if "authors" in dict_blog:
+        try:
+            await repository.delete_authors(blog_id)
+            authors_set: Set[int] = set(map(int, dict_blog["authors"].split(",")))
+            ids: List[Record] | List = await repository.insert_authors(blog_id=blog_id, users=authors_set)
 
-    if description:
-        params["description"] = description
+            dict_blog["authors"]: List[int] = [author["author_id"] for author in ids]
+        except ValueError:
+            raise HTTPException(status_code=HTTP_422_UNPROCESSABLE_ENTITY, detail=err_response.INVALID_AUTHORS)
 
-    if title or description:
-        await Blog.filter(Blog.id == process_id).update(params)
-
-    if authors:
-        await BlogAuthors.filter(BlogAuthors.blog_id == process_id).delete()
-        values = [{"blog_id": process_id, "author_id": int(element)}
-                  for element in authors.split(", ") if await User.filter(User.id == int(element)).exists()]
-
-        await BlogAuthors.objects().insert_many(values)
-
-    params.update(authors=authors)
-    return {"status": "ok", **params}
+    return {"status": "ok", **dict_blog}
 
 
-@router.delete("/{process_id}/", dependencies=[Depends(has_access)], status_code=HTTP_204_NO_CONTENT)
-async def blog_delete(process_id: uuid.UUID):
-    await BlogAuthors.filter(BlogAuthors.blog_id == process_id).delete()
-    await Blog.filter(Blog.id == process_id).delete()
-    await Post.filter(Post.blog_id == process_id).delete()
+@router.delete("/{blog_id}/",
+               dependencies=[Depends(has_access)],
+               response_model=None,
+               status_code=HTTP_204_NO_CONTENT)
+async def blog_delete(blog_id: uuid.UUID,
+                      repository: BlogRepository = Depends(BlogRepository)):
+    await repository.delete_blog(blog_id)

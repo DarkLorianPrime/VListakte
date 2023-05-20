@@ -1,18 +1,20 @@
 import asyncio
 import re
+from asyncio import Lock
 from typing import Literal, List, Optional
 
 from databases.backends.postgres import Record
 
 from libraries.orm.database import db
 
-
+lock = Lock()
 class Query:
     _end_query = ""
     _query = []
     _order = ""
 
     def __init__(self, model_name, query=None):
+        self.group = ""
         self.result = None
         self._query = []
         if query is not None:
@@ -26,6 +28,7 @@ class Query:
         self._end_query = f"select * from \"{self._model_name}\" "
         self._end_query += self._get_where()
         self._end_query += self._order
+        self._end_query += self.group
         return self
 
     def order_by(self, field, side: Literal["asc", "desc", "DESC", "ASC"]):
@@ -40,7 +43,7 @@ class Query:
         query = self._end_query
 
         if params:
-            params = list(map(lambda param: f"\"{param}\"", params))
+            params = list(map(lambda param: f"\"{param}\"" if "count" not in param else param, params))
             query = query.replace("*", ", ".join(params))
 
         result = await db.fetch_all(query, self._where_params)
@@ -104,12 +107,22 @@ class Query:
         if params:
             params = list(map(lambda param: f"\"{param}\"", params))
             query = query.replace("*", ", ".join(params))
-        return await db.fetch_one(query, self._where_params)
+        return await db.fetch_one(query=query, values=self._where_params)
+
+    async def execute(self, query: str, params,execute: bool = True, fetch_one: bool = False, fetch_all: bool = False):
+        async with db.acquire():
+            if execute:
+                return await db.execute(query)
+
+            if fetch_one:
+                return await db.fetch_one(query)
+
+            if fetch_all:
+                return await db.fetch_all(query)
 
     async def delete(self):
         where = self._get_where()
         await db.execute(f"DELETE FROM {self._model_name} {where}", self._where_params)
-        return self
 
     async def insert(self, *returned, **kwargs):
         values = ", ".join(kwargs.keys())
@@ -141,6 +154,10 @@ class Query:
             return await db.fetch_all(query, insert_dict)
 
         return await db.execute(query, insert_dict)
+
+    def group_by(self, *fields):
+        self.group = f" group by {', '.join(fields)}"
+        return self
 
     async def update(self, values: dict) -> Optional[Record]:
         where = self._get_where()
