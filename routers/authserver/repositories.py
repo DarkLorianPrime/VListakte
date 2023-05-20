@@ -3,7 +3,7 @@ from typing import Optional, List
 
 from databases.backends.postgres import Record
 from fastapi import HTTPException
-from starlette.status import HTTP_422_UNPROCESSABLE_ENTITY, HTTP_400_BAD_REQUEST
+from starlette.status import HTTP_422_UNPROCESSABLE_ENTITY, HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND
 
 from routers.authserver.models import User, UserRoles
 from routers.authserver.responses import ErrorResponses
@@ -30,6 +30,6 @@ class UserRepository:
     async def validate_token(self, username: str, password: str) -> uuid.UUID:
         instance = await User.valid_password(username=username, clear_password=password)
         if not instance:
-            raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=ErrorResponses.DATA_NF)
+            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=ErrorResponses.DATA_NF)
 
         return instance.token

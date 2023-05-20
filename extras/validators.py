@@ -9,10 +9,10 @@ from routers.authserver.models import User, UserRoles
 from routers.blogs.models import Blog
 
 
-async def has_access(request: Request, process_id: Optional[uuid.UUID], raise_exception: bool = True) -> bool:
+async def has_access(request: Request, blog_id: Optional[uuid.UUID], raise_exception: bool = True) -> bool:
     user = await is_auth(request.headers.get("authorization"))
     is_admin = await UserRoles.objects().filter(UserRoles.role_id == user.id).exists()
-    is_owner = await Blog.objects().filter(Blog.owner_id == user.id, Blog.id == process_id).exists()
+    is_owner = await Blog.objects().filter(Blog.owner_id == user.id, Blog.id == blog_id).exists()
 
     if is_owner or is_admin:
         return user

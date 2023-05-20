@@ -1,143 +1,143 @@
 import uuid
 from datetime import datetime
-from typing import Optional
 
 from databases.backends.postgres import Record
-from fastapi import APIRouter, Depends, Form, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from starlette.requests import Request
-from starlette.status import HTTP_422_UNPROCESSABLE_ENTITY, HTTP_404_NOT_FOUND, HTTP_200_OK, HTTP_204_NO_CONTENT
+from starlette.status import HTTP_422_UNPROCESSABLE_ENTITY, HTTP_404_NOT_FOUND, HTTP_200_OK, HTTP_204_NO_CONTENT, \
+    HTTP_201_CREATED
 
 from extras.validators import is_auth, has_access
-from libraries.orm.fields import _in
-from routers.posts.models import Post, PostLike, PostView, PostCommentaries
+from routers.blogs.pydantic_models import PostsFilterModel, UpdatePostModel
+from routers.posts.models import PostLike, PostView
+from routers.posts.pydantic_models import CreatePostModel
+from routers.posts.repositories import PostRepository, ViewRepository, LikeRepository
+from routers.posts.responses import ErrorResponses
 
 router = APIRouter()
+err_resp = ErrorResponses
 
 
 @router.get("/{blog_id}/posts/")
-async def get_all_posts(request: Request, blog_id: uuid.UUID, user: Record = Depends(is_auth), published: bool = True):
-    access = await has_access(request=request, process_id=blog_id, raise_exception=False)
+async def get_all_posts(request: Request,
+                        blog_id: uuid.UUID,
+                        filters: PostsFilterModel,
+                        user: Record = Depends(is_auth),
+                        post_repository: PostRepository = Depends(PostRepository)):
+    access = await has_access(request=request, blog_id=blog_id, raise_exception=False)
     return_dict = {"has_access": bool(access), "posts": []}
+    filters = filters.dict()
+    published = filters.pop("published") if access else True
+    posts_ids, posts = post_repository.get_posts_include_ids(**filters, published=published, blog_id=blog_id)
 
-    published = published if access else True
-    posts = await Post.filter(Post.blog_id == blog_id, Post.is_published == published).all().values()
-    posts_ids = [str(post.id) for post in posts]
+    likes_ids = post_repository.get_model_items(PostLike, posts_ids, user.id)
+    all_likes = await post_repository.get_grouped_param_count(PostLike)
 
-    likes = await PostLike.filter(_in(PostLike.post_id, posts_ids), PostLike.user_id == user.id).all().values("post_id")
-    likes_ids = [like.post_id for like in likes]
-    all_likes = await PostLike.objects().group_by("post_id").values("post_id", "count(id)")
-
-    views = await PostView.filter(_in(PostView.post_id, posts_ids), PostView.user_id == user.id).all().values("post_id")
-    views_ids = [view.post_id for view in views]
-    all_views = await PostView.objects().group_by("post_id").values("post_id", "count(id)")
+    views_ids = post_repository.get_model_items(PostView, posts_ids, user.id)
+    all_views = await post_repository.get_grouped_param_count(PostView)
 
     for post in posts:
-        post = dict(post)
-        likes = {"count": x["count"] for x in all_likes if x.post_id == post["id"]}
-        views = {"count": x["count"] for x in all_views if x.post_id == post["id"]}
+        dict_post = dict(post)
 
-        post["is_liked"] = post["id"] in likes_ids
-        post["is_viewed"] = post["id"] in views_ids
+        dict_post["is_liked"] = post.id in likes_ids
+        dict_post["is_viewed"] = post.id in views_ids
 
-        post["likes"] = likes.get("count", 0)
-        post["views"] = views.get("count", 0)
-        return_dict["posts"].append(post)
+        dict_post["likes"] = await post_repository.get_count_from_grouped(post_id=post.id, result=all_likes)
+        dict_post["views"] = await post_repository.get_count_from_grouped(post_id=post.id, result=all_views)
+
+        return_dict["posts"].append(dict_post)
 
     return return_dict
 
 
-@router.post("/{process_id}/posts/")
-async def create_post(process_id: uuid.UUID,
+@router.post("/{blog_id}/posts/",
+             status_code=HTTP_201_CREATED,
+             )
+async def create_post(blog_id: uuid.UUID,
                       user: Record = Depends(has_access),
-                      title: str = Form(...),
-                      text: str = Form(...),
-                      is_published: bool = Form(...)):
-    post = await Post.objects().filter(Post.blog_id == process_id, Post.title == title).exists()
+                      post: CreatePostModel = Depends(CreatePostModel.to_form),
+                      repository: PostRepository = Depends(PostRepository)):
+    if await repository.check_post_exists_title(blog_id=blog_id, title=post.title):
+        raise HTTPException(status_code=HTTP_422_UNPROCESSABLE_ENTITY, detail=err_resp.TITLE_EXISTS)
 
-    if post:
-        raise HTTPException(status_code=HTTP_422_UNPROCESSABLE_ENTITY, detail="Post with this title already exists")
+    dict_post: dict = post.dict()
+    dict_post.update({
+        "created_at": datetime.now(),
+        "author_id": user.id,
+        "blog_id": blog_id
+    })
 
-    values = {"title": title, "text": text, "is_published": is_published, "created_at": datetime.now(),
-              "author_id": user.id, "blog_id": process_id}
-    await Post.objects().insert(**values)
-
-    return {key: str(value) for key, value in values.items()}
-
-
-@router.delete("/{process_id}/posts/{post_id}/", dependencies=[Depends(has_access)], status_code=HTTP_204_NO_CONTENT)
-async def delete_post(process_id: int, post_id: int):
-    await Post.filter(Post.id == post_id, Post.blog_id == process_id).delete()
-    await PostView.filter(PostView.post_id == post_id).delete()
-    await PostLike.filter(PostLike.post_id == post_id).delete()
-    await PostCommentaries.filter(PostCommentaries.post_id == post_id).delete()
+    await repository.create_post(dict_post)
+    return dict_post
 
 
-@router.patch("/{process_id}/posts/{post_id}/", dependencies=[Depends(has_access)], status_code=200)
-async def update_post(process_id: int,
+@router.delete("/{blog_id}/posts/{post_id}/",
+               dependencies=[Depends(has_access)],
+               status_code=HTTP_204_NO_CONTENT)
+async def delete_post(blog_id: uuid.UUID,
                       post_id: int,
-                      title: Optional[str] = Form(None),
-                      text: Optional[str] = Form(None),
-                      is_published: Optional[bool] = Form(None)):
-    params = {}
-    if title:
-        params["title"] = title
-
-    if text:
-        params["text"] = text
-
-    if is_published is not None:
-        params["is_published"] = is_published
-
-    if params:
-        await Post.objects().filter(Post.id == post_id, Post.blog_id == process_id).update(params)
-
-    return {"status": "ok", **params}
+                      repository: PostRepository = Depends(PostRepository)):
+    await repository.delete_post(post_id=post_id, blog_id=blog_id)
 
 
-@router.get("/{process_id}/posts/{post_id}/", status_code=HTTP_200_OK)
-async def get_one_post(request: Request, process_id: uuid.UUID, post_id: int, user: Record = Depends(is_auth)):
-    if not await PostView.filter(PostView.post_id == post_id, PostView.user_id == user.id).exists():
-        await PostView.objects().insert(post_id=post_id, user_id=user.id)
+@router.patch("/{blog_id}/posts/{post_id}/",
+              dependencies=[Depends(has_access)],
+              status_code=HTTP_200_OK)
+async def update_post(blog_id: uuid.UUID,
+                      post_id: int,
+                      filters: UpdatePostModel = Depends(UpdatePostModel.to_form),
+                      repository: PostRepository = Depends(PostRepository)):
+    filters = filters.dict(exclude_unset=True)
 
-    is_liked = await PostLike.filter(PostLike.post_id == post_id, PostLike.user_id == user.id).exists()
-    access = await has_access(request=request, process_id=process_id, raise_exception=False)
-    returned_values = {"is_access": bool(access)}
+    if filters:
+        await repository.update_post(blog_id=blog_id, post_id=post_id, parameters=filters)
 
-    query = Post.filter(Post.id == post_id)
-    if not access:
-        query = query.filter(Post.is_published == True)
+    return {"status": "ok", **filters}
 
-    post = await query.first()
+
+@router.get("/{blog_id}/posts/{post_id}/",
+            status_code=HTTP_200_OK)
+async def get_one_post(request: Request,
+                       blog_id: uuid.UUID,
+                       post_id: int,
+                       user: Record = Depends(is_auth),
+                       post_repository: PostRepository = Depends(PostRepository),
+                       view_repository: ViewRepository = Depends(ViewRepository),
+                       like_repository: LikeRepository = Depends(LikeRepository),
+                       ):
+    access = await has_access(request=request, blog_id=blog_id, raise_exception=False)
+
+    post = await post_repository.get_post(access=bool(access), post_id=post_id)
+
     if post is None:
-        raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Post with this ID not found")
+        raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=err_resp.ID_NOTFOUND)
 
-    returned_values["is_liked"] = is_liked
-    returned_values["post"] = post
+    if not await view_repository.is_viewed_post(post_id=post_id, user_id=user.id):
+        await view_repository.set_view(post_id=post_id, user_id=user.id)
 
-    return returned_values
+    is_liked = await like_repository.is_liked_post(post_id=post_id, user_id=user.id)
+
+    return {"is_access": bool(access),
+            "is_liked": is_liked,
+            "post": post}
 
 
-@router.post("/{process_id}/posts/{post_id}/like/", status_code=HTTP_200_OK)
-async def post_like(process_id: uuid.UUID,
+@router.post("/{blog_id}/posts/{post_id}/like/",
+             status_code=HTTP_200_OK)
+async def post_like(blog_id: uuid.UUID,
                     post_id: int,
-                    user: Record = Depends(is_auth)):
-    post = await Post.filter(Post.id == post_id, Post.blog_id == process_id).exists()
+                    user: Record = Depends(is_auth),
+                    post_repository: PostRepository = Depends(PostRepository),
+                    like_repository: LikeRepository = Depends(LikeRepository)):
+    if not await post_repository.check_post_exists_by_id(post_id=post_id, blog_id=blog_id):
+        raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=err_resp.ID_NOTFOUND)
 
-    if not post:
-        raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail={"error": "Post not found"})
-
-    like = await PostLike.filter(PostLike.post_id == post_id, PostLike.user_id == user.id).exists()
-
-    if not like:
-        await PostLike.objects().insert(post_id=post_id, user_id=user.id)
-        return {"status": "ok"}
-
-    await PostLike.filter(PostLike.post_id == post_id, PostLike.user_id == user.id).delete()
+    await like_repository.toggle_like(post_id=post_id, user_id=user.id)
     return {"status": "ok"}
 
 
-@router.get("/posts/last/", dependencies=[Depends(is_auth)], status_code=HTTP_200_OK)
-async def post_last():
-    posts = Post.objects().order_by(Post.created_at, "DESC").all()[:5]
-    return posts
-
+@router.get("/posts/last/",
+            dependencies=[Depends(is_auth)],
+            status_code=HTTP_200_OK)
+async def post_last(repository: PostRepository = Depends(PostRepository)):
+    return await repository.get_last_posts(limit=5)

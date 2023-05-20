@@ -1,4 +1,5 @@
 import asyncio
+import subprocess
 import sys
 
 import importlib
@@ -8,6 +9,7 @@ import importlib.util
 import traceback
 from datetime import datetime
 
+import pytest
 import uvicorn
 
 from libraries.database.migrator import Migrations
@@ -17,6 +19,7 @@ from libraries.utils.files import startswith_check_file, endswith_check_file
 import nest_asyncio
 
 nest_asyncio.apply()
+
 
 async def first_migration() -> None:
     """
@@ -110,7 +113,6 @@ async def rollback(args: list) -> None:
     :return: None.
     Description: Rolls back the last migration, or if --step=N is specified, rolls back the last N migrations.
     """
-    print(123)
     data = await rollback_common()
     steps = 1
     if len(args) == 4:
@@ -155,12 +157,15 @@ async def createmigration(args: list) -> None:
                 f"migrations/{args[2]}-{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}.py")
 
 
+async def run_tests():
+    await migrate(...)
+    subprocess.run(["python", "tests.py"])
+
+
 async def run_server():
-    await db.connect()
     main_module = importlib.import_module('main')
     uvicorn.run(main_module.app, port=8000, host="0.0.0.0")
     print("stop server")
-    await db.disconnect()
 
 
 migrator_command = {
@@ -172,7 +177,8 @@ migrator_command = {
 }
 
 command = {
-    "runserver": run_server
+    "runserver": run_server,
+    "runtests": run_tests
 }
 
 

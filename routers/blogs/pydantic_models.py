@@ -2,6 +2,7 @@ import datetime
 from typing import List, Set, Optional
 from uuid import UUID
 
+from fastapi import Query, Form
 from pydantic import BaseModel
 
 from libraries.utils.pydantic_base import CustomModel
@@ -34,6 +35,18 @@ class BlogRetrieveResponseModel(BaseModel):
     created_at: datetime.datetime
     updated_at: datetime.datetime
     owner_id: int
+
+
+class PostsFilterModel(BaseModel):
+    published: bool = True
+    offset: int = Query(0)
+    limit: int = Query(25)
+
+
+class UpdatePostModel(CustomModel):
+    title: Optional[str] = Form(None),
+    text: Optional[str] = Form(None),
+    is_published: Optional[bool] = Form(None)
 
 
 class RetrieveResponseModel(BaseModel):

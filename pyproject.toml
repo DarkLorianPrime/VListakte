@@ -17,6 +17,11 @@ python-multipart = "^0.0.6"
 uvloop = "^0.17.0"
 nest-asyncio = "^1.5.6"
 fastapi = "^0.95.1"
+pytest = "^7.3.1"
+httpx = "^0.24.0"
+pytest-asyncio = "^0.21.0"
+anyio = "^3.6.2"
+aiosqlite = "^0.19.0"
 
 
 [build-system]

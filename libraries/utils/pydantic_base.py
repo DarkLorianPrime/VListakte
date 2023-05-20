@@ -14,4 +14,5 @@ class CustomModel(BaseModel):
                 data = await request.json()
             except JSONDecodeError:
                 data = {}
+
         return cls(**data)

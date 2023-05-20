@@ -1,12 +1,13 @@
 import asyncio
 import re
+from asyncio import Lock
 from typing import Literal, List, Optional
 
 from databases.backends.postgres import Record
 
 from libraries.orm.database import db
 
-
+lock = Lock()
 class Query:
     _end_query = ""
     _query = []
@@ -106,12 +107,22 @@ class Query:
         if params:
             params = list(map(lambda param: f"\"{param}\"", params))
             query = query.replace("*", ", ".join(params))
-        return await db.fetch_one(query, self._where_params)
+        return await db.fetch_one(query=query, values=self._where_params)
+
+    async def execute(self, query: str, params,execute: bool = True, fetch_one: bool = False, fetch_all: bool = False):
+        async with db.acquire():
+            if execute:
+                return await db.execute(query)
+
+            if fetch_one:
+                return await db.fetch_one(query)
+
+            if fetch_all:
+                return await db.fetch_all(query)
 
     async def delete(self):
         where = self._get_where()
         await db.execute(f"DELETE FROM {self._model_name} {where}", self._where_params)
-        return self
 
     async def insert(self, *returned, **kwargs):
         values = ", ".join(kwargs.keys())
