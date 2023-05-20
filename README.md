@@ -70,7 +70,7 @@ HTTP/1.1 201 Created
 #### Предполагается, что docker, compose, nginx и их зависимости уже установлены
 Клонируем репозиторий
 ```bash
-$ git clone https://github.com/DarkLorianPrime/fastapi_blog
+$ git clone https://github.com/DarkLorianPrime/vlistakte
 $ cd fastapi_blog
 $ tree
 .
