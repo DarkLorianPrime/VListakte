@@ -160,3 +160,13 @@ SECURITY_TOKEN=   -> blabla123_please_save_yes_save_my_passwords
 ```bash
 $ docker-compose up -d --build
 ```
+Вы должны увидеть надписи
+```
+Creating fastapi_blog_backend_1  ... done
+Creating fastapi_blog_database_1 ... done
+```
+
+Сервис запущен и готов к работе. Можно подключать к nginx и зарабатывать миллионы лисобаксов.
+
+# Contacts
+Grand developer - [@darklorianprime](https://vk.com/darklorianprime) - kasimov.alexander.ul@gmail.com
