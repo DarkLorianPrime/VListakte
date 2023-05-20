@@ -23,7 +23,8 @@ services:
     build: backend
     environment:
       <<: *x-postgres-environment
-
+    ports:
+      - "8001:8000"
     volumes:
       - "/etc/timezone:/etc/timezone:ro"
       - "/etc/localtime:/etc/localtime:ro"
